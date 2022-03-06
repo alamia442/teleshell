@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
@@ -15,7 +15,6 @@ import (
 const (
 	CmdLogin  = "/login"
 	CmdLogout = "/logout"
-	CmdShell  = "/shell"
 )
 
 var (
@@ -27,7 +26,6 @@ var (
 const (
 	ChatStateInitial = iota
 	ChatStateAwaitingPassword
-	ChatStateAwaitingCommand
 )
 
 type ChatState struct {
@@ -113,44 +111,52 @@ func main() {
 				}
 
 			// Handle shell command.
-			case update.Message.Text == CmdShell:
-				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message for command run.
-					messageConfig := newMessageConfig(update.Message, "Specify command")
-					messageConfig.ReplyMarkup = tgbotapi.ForceReply{ForceReply: true}
-					logSendMessage(bot.Send(messageConfig))
-
-					// Switch chat session state to awaiting command.
-					chats[update.Message.Chat.ID].State = ChatStateAwaitingCommand
-				}
-
-			// Continue handle shell command.
-			case chats[update.Message.Chat.ID].State == ChatStateAwaitingCommand:
+			default:
 				// Switch chat state back to initial to rule out state traps.
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					go func() {
+					go func(message *tgbotapi.Message) {
 						output, err := executeInBash(update.Message.Text)
+						output = strings.Trim(output, "\n")
+
+						// Prepare response message for command run.
+						messageTextBuilder := strings.Builder{}
+
+						offset0, length0 := messageTextBuilder.Len(), len("Output:")
+						messageTextBuilder.WriteString("Output:\n")
+
+						offset1, length1 := messageTextBuilder.Len(), len(output)
+						messageTextBuilder.WriteString(output)
+
 						if err != nil {
 							// Prepare error response message for command run.
-							messageText := fmt.Sprintf("Output:\n%s\nError:\n%s", output, err)
-							messageConfig := newMessageConfig(update.Message, messageText)
+							messageTextBuilder.WriteString("\n\n")
+							offset2, length2 := messageTextBuilder.Len(), len("Error:")
+							messageTextBuilder.WriteString("Error:\n")
+
+							offset3, length3 := messageTextBuilder.Len(), len(err.Error())
+							messageTextBuilder.WriteString(err.Error())
+
+							messageText := messageTextBuilder.String()
+							messageConfig := newMessageConfig(message, messageText)
+							messageConfig.Entities = append(messageConfig.Entities,
+								tgbotapi.MessageEntity{Type: "bold", Offset: offset0, Length: length0},
+								tgbotapi.MessageEntity{Type: "code", Offset: offset1, Length: length1},
+								tgbotapi.MessageEntity{Type: "bold", Offset: offset2, Length: length2},
+								tgbotapi.MessageEntity{Type: "code", Offset: offset3, Length: length3},
+							)
 							logSendMessage(bot.Send(messageConfig))
 						} else {
-							// Prepare success response message for command run.
-							messageText := fmt.Sprintf("Output:\n%s", output)
-							messageConfig := newMessageConfig(update.Message, messageText)
+							messageText := messageTextBuilder.String()
+							messageConfig := newMessageConfig(message, messageText)
+							messageConfig.Entities = append(messageConfig.Entities,
+								tgbotapi.MessageEntity{Type: "bold", Offset: offset0, Length: length0},
+								tgbotapi.MessageEntity{Type: "code", Offset: offset1, Length: length1},
+							)
 							logSendMessage(bot.Send(messageConfig))
 						}
-					}()
-				}
-
-			default:
-				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message for unknown command.
-					messageConfig := newMessageConfig(update.Message, "Unknown command")
-					logSendMessage(bot.Send(messageConfig))
+					}(update.Message)
 				}
 			}
 		}
