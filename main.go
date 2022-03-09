@@ -150,7 +150,9 @@ func main() {
 								tgbotapi.MessageEntity{Type: "bold", Offset: offset2, Length: length2},
 								tgbotapi.MessageEntity{Type: "code", Offset: offset3, Length: length3},
 							)
-							logSendMessage(bot.Send(messageConfig))
+							for _, chunkMessageConfig := range splitLargeMessage(messageConfig) {
+								logSendMessage(bot.Send(chunkMessageConfig))
+							}
 						} else {
 							messageText := messageTextBuilder.String()
 							messageConfig := newMessageConfig(message, messageText)
@@ -158,7 +160,9 @@ func main() {
 								tgbotapi.MessageEntity{Type: "bold", Offset: offset0, Length: length0},
 								tgbotapi.MessageEntity{Type: "code", Offset: offset1, Length: length1},
 							)
-							logSendMessage(bot.Send(messageConfig))
+							for _, chunkMessageConfig := range splitLargeMessage(messageConfig) {
+								logSendMessage(bot.Send(chunkMessageConfig))
+							}
 						}
 					}(update.Message)
 				}
@@ -183,6 +187,95 @@ func newMessageConfig(replyTo *tgbotapi.Message, messageText string) tgbotapi.Me
 	messageConfig := tgbotapi.NewMessage(replyTo.Chat.ID, messageText)
 	messageConfig.ReplyToMessageID = replyTo.MessageID
 	return messageConfig
+}
+
+// splitLargeMessage splits large message into several small messages.
+func splitLargeMessage(messageConfig tgbotapi.MessageConfig) []tgbotapi.MessageConfig {
+	inRange := func(x, a, b int) bool { return x >= a && x <= b }
+
+	// Result chunk messages.
+	chunkMessageConfigs := make([]tgbotapi.MessageConfig, 0)
+
+	// Split original message to chunks.
+	sectionNumber, sectionLowerIndex := 0, 0
+	for sectionNumber < MaxChunkMessages && sectionLowerIndex < len(messageConfig.Text) {
+		chunkMessageConfig := messageConfig
+		sectionUpperIndex := 0
+
+		remainingLength := len(chunkMessageConfig.Text) - sectionLowerIndex
+		if remainingLength <= MaxMessageLength {
+			sectionUpperIndex = sectionLowerIndex + remainingLength - 1
+		} else {
+			sectionUpperIndex = sectionLowerIndex + MaxMessageLength - 1
+		}
+
+		chunkMessageConfig.Text = chunkMessageConfig.Text[sectionLowerIndex : sectionUpperIndex+1]
+
+		if len(chunkMessageConfig.Entities) > 0 {
+			oldEntities := chunkMessageConfig.Entities
+			newEntities := make([]tgbotapi.MessageEntity, 0)
+
+			for _, entity := range oldEntities {
+				entityLowerIndex, entityUpperIndex := entity.Offset, entity.Offset+entity.Length
+
+				switch {
+
+				// When the entity begins and ends in the current section.
+				case entityLowerIndex >= sectionLowerIndex && entityUpperIndex <= sectionUpperIndex:
+					// Calculate entity offset for local-to-section dimensions.
+					entity.Offset = entityLowerIndex - sectionLowerIndex
+
+					// Emmit calculated entity dimensions.
+					newEntities = append(newEntities, entity)
+
+				// When the entity begins in the current section and ends after it
+				case inRange(entityLowerIndex, sectionLowerIndex, sectionUpperIndex) && entityUpperIndex > sectionUpperIndex:
+					offsetToSection := entityLowerIndex - sectionLowerIndex
+
+					// Calculate entity length for local-to-section dimensions.
+					if entity.Length+offsetToSection > MaxMessageLength {
+						entity.Length = MaxMessageLength - offsetToSection
+					}
+
+					// Calculate entity offset for local-to-section dimensions.
+					entity.Offset = offsetToSection
+
+					// Emmit calculated entity dimensions.
+					newEntities = append(newEntities, entity)
+
+				// When the entity begins before the current section and ends in it.
+				case inRange(entityUpperIndex, sectionLowerIndex, sectionUpperIndex) && entityLowerIndex < sectionLowerIndex:
+					// Calculate entity length for local-to-section dimensions.
+					entity.Length = entityUpperIndex - sectionLowerIndex
+
+					// Calculate entity offset for local-to-section dimensions.
+					entity.Offset = 0
+
+					// Emmit calculated entity dimensions.
+					newEntities = append(newEntities, entity)
+
+				// When the entity begins before the current session and ends after it.
+				case entityLowerIndex < sectionLowerIndex && entityUpperIndex > sectionUpperIndex:
+					// Calculate entity length for local-to-section dimensions.
+					entity.Length = MaxMessageLength
+
+					// Calculate entity offset for local-to-section dimensions.
+					entity.Offset = 0
+
+					// Emmit calculated entity dimensions.
+					newEntities = append(newEntities, entity)
+				}
+			}
+
+			chunkMessageConfig.Entities = newEntities
+		}
+		chunkMessageConfigs = append(chunkMessageConfigs, chunkMessageConfig)
+
+		sectionNumber += 1
+		sectionLowerIndex += MaxMessageLength
+	}
+
+	return chunkMessageConfigs
 }
 
 // logIncomingMessage logs incoming message from the update object.
