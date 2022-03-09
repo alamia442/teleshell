@@ -96,6 +96,12 @@ func main() {
 				// Switch chat session state to awaiting password.
 				chats[update.Message.Chat.ID].State = ChatStateAwaitingPassword
 
+			// Handle login with args command.
+			case strings.HasPrefix(update.Message.Text, CmdLogin):
+				commandArgs := strings.TrimPrefix(update.Message.Text, CmdLogin)
+				update.Message.Text = strings.Trim(commandArgs, " ")
+				fallthrough
+
 			// Handle login command password.
 			case chats[update.Message.Chat.ID].State == ChatStateAwaitingPassword:
 				// Switch chat state back to initial to rule out state traps.
