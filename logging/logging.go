@@ -43,6 +43,7 @@ func (l *LoggerAdapter) Printf(format string, v ...interface{}) {
 	l.newEvent().Msg(strings.Trim(fmt.Sprintf(format, v...), "\n"))
 }
 
+// newEvent constricts new event.
 func (l *LoggerAdapter) newEvent() *zerolog.Event {
 	return log.Debug().Str("component", l.component)
 }
