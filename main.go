@@ -131,7 +131,9 @@ func main() {
 						writer := MessagesWriter{
 							maxMessageLength: 4096,
 							maxMessagesCount: 10,
-							replyToMessage:   message,
+							newMessageConfig: func() tgbotapi.MessageConfig {
+								return newMessageConfig(message, "")
+							},
 						}
 						writer.Write("Output:", "bold")
 						writer.Write("\n", "")
@@ -223,7 +225,7 @@ func executeInShell(script string) (string, error) {
 type MessagesWriter struct {
 	maxMessageLength int
 	maxMessagesCount int
-	replyToMessage   *tgbotapi.Message
+	newMessageConfig func() tgbotapi.MessageConfig
 	messageConfigs   []tgbotapi.MessageConfig
 	messageEntities  []tgbotapi.MessageEntity
 	stringBuilder    strings.Builder
@@ -276,14 +278,9 @@ func (mw *MessagesWriter) flush() {
 		return
 	}
 
-	messageConfig := tgbotapi.MessageConfig{
-		Text:     mw.stringBuilder.String(),
-		Entities: mw.messageEntities,
-	}
-
-	if mw.replyToMessage != nil {
-		messageConfig.ReplyToMessageID = mw.replyToMessage.MessageID
-	}
+	messageConfig := mw.newMessageConfig()
+	messageConfig.Text = mw.stringBuilder.String()
+	messageConfig.Entities = mw.messageEntities
 
 	mw.messageConfigs = append(mw.messageConfigs, messageConfig)
 	mw.stringBuilder = strings.Builder{}

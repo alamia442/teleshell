@@ -103,6 +103,9 @@ func Test_MessageWriter(t *testing.T) {
 			writer := MessagesWriter{
 				maxMessageLength: 4096,
 				maxMessagesCount: 10,
+				newMessageConfig: func() tgbotapi.MessageConfig {
+					return tgbotapi.MessageConfig{}
+				},
 			}
 			for _, call := range tt.args.calls {
 				writer.Write(call.message, call.format)
