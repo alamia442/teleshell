@@ -320,5 +320,5 @@ func executeInShell(script string) (string, error) {
 		return string(output), errors.Wrap(err, "failed to execute command")
 	}
 
-	return string(output), nil
+	return strings.ToValidUTF8(string(output), ""), nil
 }
