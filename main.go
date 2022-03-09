@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -19,6 +20,9 @@ const (
 
 	// CmdLogout specifies chat logout command.
 	CmdLogout = "/logout"
+
+	// CmdImage specifies image display command.
+	CmdImage = "/image"
 )
 
 var (
@@ -33,6 +37,9 @@ const (
 
 	// ChatStateAwaitingPassword represents awaiting password state
 	ChatStateAwaitingPassword
+
+	// ChatStateAwaitingImagePath represents awaiting image path state
+	ChatStateAwaitingImagePath
 )
 
 // ChatState represents chat state.
@@ -116,6 +123,36 @@ func main() {
 
 					// Reset chat session state.
 					chats[update.Message.Chat.ID].LoggedIn = false
+				}
+
+			// Handle image command.
+			case update.Message.Text == CmdImage:
+				if checkLogin(chats, update.Message, bot) {
+					// Prepare response message for successful logout.
+					messageConfig := newMessageConfig(update.Message, "Specify image path")
+					logSendMessage(bot.Send(messageConfig))
+
+					// Switch chat session state to awaiting image path.
+					chats[update.Message.Chat.ID].State = ChatStateAwaitingImagePath
+				}
+
+			// Handle image path command.
+			case chats[update.Message.Chat.ID].State == ChatStateAwaitingImagePath:
+				// Switch chat state back to initial to rule out state traps.
+				chats[update.Message.Chat.ID].State = ChatStateInitial
+
+				if checkLogin(chats, update.Message, bot) {
+					if content, err := ioutil.ReadFile(update.Message.Text); err != nil {
+						// Prepare response message for read error of image file.
+						messageConfig := newMessageConfig(update.Message, err.Error())
+						logSendMessage(bot.Send(messageConfig))
+					} else {
+						// Prepare response message with image file as a photo.
+						fileBytes := tgbotapi.FileBytes{Name: "image.jpg", Bytes: content}
+						messageConfig := tgbotapi.NewPhoto(update.Message.Chat.ID, fileBytes)
+						messageConfig.ReplyToMessageID = update.Message.MessageID
+						logSendMessage(bot.Send(messageConfig))
+					}
 				}
 
 			// Handle shell command.
