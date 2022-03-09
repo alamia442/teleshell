@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,6 +22,9 @@ const (
 
 	// CmdImage specifies image display command.
 	CmdImage = "/image"
+
+	// CmdVideo specifies video display command.
+	CmdVideo = "/video"
 )
 
 var (
@@ -35,11 +37,14 @@ const (
 	// ChatStateInitial represents initial chat state.
 	ChatStateInitial = iota
 
-	// ChatStateAwaitingPassword represents awaiting password state
+	// ChatStateAwaitingPassword represents awaiting password state.
 	ChatStateAwaitingPassword
 
-	// ChatStateAwaitingImagePath represents awaiting image path state
+	// ChatStateAwaitingImagePath represents awaiting image path state.
 	ChatStateAwaitingImagePath
+
+	// ChatStateAwaitingVideoPath represents awaiting video path state.
+	ChatStateAwaitingVideoPath
 )
 
 // ChatState represents chat state.
@@ -142,23 +147,53 @@ func main() {
 					chats[update.Message.Chat.ID].State = ChatStateAwaitingImagePath
 				}
 
+			// Handle image with args command.
+			case strings.HasPrefix(update.Message.Text, CmdImage):
+				commandArgs := strings.TrimPrefix(update.Message.Text, CmdImage)
+				update.Message.Text = strings.Trim(commandArgs, " ")
+				fallthrough
+
 			// Handle image path command.
 			case chats[update.Message.Chat.ID].State == ChatStateAwaitingImagePath:
 				// Switch chat state back to initial to rule out state traps.
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					if content, err := ioutil.ReadFile(update.Message.Text); err != nil {
-						// Prepare response message for read error of image file.
-						messageConfig := newMessageConfig(update.Message, err.Error())
-						logSendMessage(bot.Send(messageConfig))
-					} else {
-						// Prepare response message with image file as a photo.
-						fileBytes := tgbotapi.FileBytes{Name: "image.jpg", Bytes: content}
-						messageConfig := tgbotapi.NewPhoto(update.Message.Chat.ID, fileBytes)
-						messageConfig.ReplyToMessageID = update.Message.MessageID
-						logSendMessage(bot.Send(messageConfig))
-					}
+					// Prepare response message with image file as a photo.
+					imageFile := tgbotapi.FilePath(update.Message.Text)
+					messageConfig := tgbotapi.NewPhoto(update.Message.Chat.ID, imageFile)
+					messageConfig.ReplyToMessageID = update.Message.MessageID
+					logSendMessage(bot.Send(messageConfig))
+				}
+
+			// Handle video command.
+			case update.Message.Text == CmdVideo:
+				if checkLogin(chats, update.Message, bot) {
+					// Prepare response message for successful logout.
+					messageConfig := newMessageConfig(update.Message, "Specify video path")
+					logSendMessage(bot.Send(messageConfig))
+
+					// Switch chat session state to awaiting image path.
+					chats[update.Message.Chat.ID].State = ChatStateAwaitingVideoPath
+				}
+
+			// Handle image with args command.
+			case strings.HasPrefix(update.Message.Text, CmdVideo):
+				commandArgs := strings.TrimPrefix(update.Message.Text, CmdVideo)
+				update.Message.Text = strings.Trim(commandArgs, " ")
+				fallthrough
+
+			// Handle image path command.
+			case chats[update.Message.Chat.ID].State == ChatStateAwaitingVideoPath:
+				// Switch chat state back to initial to rule out state traps.
+				chats[update.Message.Chat.ID].State = ChatStateInitial
+
+				if checkLogin(chats, update.Message, bot) {
+					// Prepare response message with image file as a photo.
+					videoFile := tgbotapi.FilePath(update.Message.Text)
+					messageConfig := tgbotapi.NewVideo(update.Message.Chat.ID, videoFile)
+					messageConfig.ReplyToMessageID = update.Message.MessageID
+					logSendMessage(bot.Send(messageConfig))
 				}
 
 			// Handle shell command.
