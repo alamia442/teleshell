@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"unicode/utf16"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
@@ -127,19 +128,19 @@ func main() {
 						// Prepare response message for command run.
 						messageTextBuilder := strings.Builder{}
 
-						offset0, length0 := messageTextBuilder.Len(), len("Output:")
+						offset0, length0 := getUTF16Length(messageTextBuilder.String()), getUTF16Length("Output:")
 						messageTextBuilder.WriteString("Output:\n")
 
-						offset1, length1 := messageTextBuilder.Len(), len(output)
+						offset1, length1 := getUTF16Length(messageTextBuilder.String()), getUTF16Length(output)
 						messageTextBuilder.WriteString(output)
 
 						if err != nil {
 							// Prepare error response message for command run.
 							messageTextBuilder.WriteString("\n\n")
-							offset2, length2 := messageTextBuilder.Len(), len("Error:")
+							offset2, length2 := getUTF16Length(messageTextBuilder.String()), getUTF16Length("Error:")
 							messageTextBuilder.WriteString("Error:\n")
 
-							offset3, length3 := messageTextBuilder.Len(), len(err.Error())
+							offset3, length3 := getUTF16Length(messageTextBuilder.String()), getUTF16Length(err.Error())
 							messageTextBuilder.WriteString(err.Error())
 
 							messageText := messageTextBuilder.String()
@@ -321,4 +322,9 @@ func executeInShell(script string) (string, error) {
 	}
 
 	return strings.ToValidUTF8(string(output), ""), nil
+}
+
+// getUTF16Length returns count of bytes for UTF-16 string representation.
+func getUTF16Length(utf8string string) int {
+	return len(utf16.Encode([]rune(utf8string)))
 }
