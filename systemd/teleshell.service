@@ -9,9 +9,9 @@ Restart=always
 RestartSec=1
 User=root
 ExecStart=/opt/bin/teleshell
-Environment="TELESHELL_API_TOKEN=*********"
-Environment="TELESHELL_PASSWORD=**********"
-Environment="TELESHELL_BASH_PATH=/bin/bash"
+Environment="TELESHELL_API_TOKEN=TELESHELL_API_TOKEN_HERE"
+Environment="TELESHELL_PASSWORD=TELESHELL_PASSWORD_HERE"
+Environment="TELESHELL_SHELL=/bin/bash"
 
 [Install]
 WantedBy=multi-user.target

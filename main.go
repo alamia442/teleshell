@@ -8,7 +8,6 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -19,8 +18,13 @@ const (
 
 var (
 	apiToken = os.Getenv("TELESHELL_API_TOKEN")
-	bashPath = os.Getenv("TELESHELL_BASH_PATH")
 	password = os.Getenv("TELESHELL_PASSWORD")
+	shell    = os.Getenv("TELESHELL_SHELL")
+)
+
+const (
+	MaxMessageLength = 4096
+	MaxChunkMessages = 10
 )
 
 const (
@@ -117,7 +121,7 @@ func main() {
 
 				if checkLogin(chats, update.Message, bot) {
 					go func(message *tgbotapi.Message) {
-						output, err := executeInBash(update.Message.Text)
+						output, err := executeInShell(update.Message.Text)
 						output = strings.Trim(output, "\n")
 
 						// Prepare response message for command run.
@@ -192,32 +196,29 @@ func logIncomingMessage(message *tgbotapi.Message) {
 
 // logSendMessage logs message.Send() invocation result.
 func logSendMessage(message tgbotapi.Message, err error) {
-	var logEvent *zerolog.Event
 	if err != nil {
-		logEvent = log.Warn()
-	} else {
-		logEvent = log.Info()
+		logEvent := log.Warn().Err(err)
+		logEvent.Int("message-id", message.MessageID)
+		logEvent.Str("message-text", message.Text)
+		logEvent.Msg("Failed to send message")
+		return
 	}
 
+	logEvent := log.Info()
 	logEvent.Str("username", message.Chat.UserName)
 	logEvent.Int("message-id", message.MessageID)
 	logEvent.Str("message-text", message.Text)
-
-	if err != nil {
-		logEvent.Err(err).Msg("Failed to send message")
-	} else {
-		logEvent.Msg("Message sent")
-	}
+	logEvent.Msg("Message sent")
 }
 
-// executeInBash executes specified script in Bash.
-func executeInBash(script string) (string, error) {
+// executeInShell executes specified script in Bash.
+func executeInShell(script string) (string, error) {
 	// Prepare command input.
 	buffer := bytes.Buffer{}
 	buffer.WriteString(script)
 
 	// Prepare command instance.
-	command := exec.Command(bashPath)
+	command := exec.Command(shell)
 	command.Stdin = &buffer
 
 	// Execute command capturing stdin and stdout.
