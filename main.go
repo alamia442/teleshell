@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
@@ -13,7 +14,10 @@ import (
 )
 
 const (
-	CmdLogin  = "/login"
+	// CmdLogin specifies chat login command.
+	CmdLogin = "/login"
+
+	// CmdLogout specifies chat logout command.
 	CmdLogout = "/logout"
 )
 
@@ -24,15 +28,14 @@ var (
 )
 
 const (
-	MaxMessageLength = 4096
-	MaxChunkMessages = 10
-)
-
-const (
+	// ChatStateInitial represents initial chat state.
 	ChatStateInitial = iota
+
+	// ChatStateAwaitingPassword represents awaiting password state
 	ChatStateAwaitingPassword
 )
 
+// ChatState represents chat state.
 type ChatState struct {
 	State    int
 	LoggedIn bool
@@ -125,45 +128,26 @@ func main() {
 						output, err := executeInShell(update.Message.Text)
 						output = strings.Trim(output, "\n")
 
-						// Prepare response message for command run.
-						messageTextBuilder := strings.Builder{}
-
-						offset0, length0 := getUTF16Length(messageTextBuilder.String()), getUTF16Length("Output:")
-						messageTextBuilder.WriteString("Output:\n")
-
-						offset1, length1 := getUTF16Length(messageTextBuilder.String()), getUTF16Length(output)
-						messageTextBuilder.WriteString(output)
+						writer := MessagesWriter{
+							maxMessageLength: 4096,
+							maxMessagesCount: 10,
+							replyToMessage:   message,
+						}
+						writer.Write("Output:", "bold")
+						writer.Write("\n", "")
+						writer.Write(output, "bold")
 
 						if err != nil {
 							// Prepare error response message for command run.
-							messageTextBuilder.WriteString("\n\n")
-							offset2, length2 := getUTF16Length(messageTextBuilder.String()), getUTF16Length("Error:")
-							messageTextBuilder.WriteString("Error:\n")
+							writer.Write("\n\n", "")
+							writer.Write("Error:", "bold")
+							writer.Write("\n", "")
+							writer.Write(err.Error(), "code")
+						}
 
-							offset3, length3 := getUTF16Length(messageTextBuilder.String()), getUTF16Length(err.Error())
-							messageTextBuilder.WriteString(err.Error())
-
-							messageText := messageTextBuilder.String()
-							messageConfig := newMessageConfig(message, messageText)
-							messageConfig.Entities = append(messageConfig.Entities,
-								tgbotapi.MessageEntity{Type: "bold", Offset: offset0, Length: length0},
-								tgbotapi.MessageEntity{Type: "code", Offset: offset1, Length: length1},
-								tgbotapi.MessageEntity{Type: "bold", Offset: offset2, Length: length2},
-								tgbotapi.MessageEntity{Type: "code", Offset: offset3, Length: length3},
-							)
-							for _, chunkMessageConfig := range splitLargeMessage(messageConfig) {
-								logSendMessage(bot.Send(chunkMessageConfig))
-							}
-						} else {
-							messageText := messageTextBuilder.String()
-							messageConfig := newMessageConfig(message, messageText)
-							messageConfig.Entities = append(messageConfig.Entities,
-								tgbotapi.MessageEntity{Type: "bold", Offset: offset0, Length: length0},
-								tgbotapi.MessageEntity{Type: "code", Offset: offset1, Length: length1},
-							)
-							for _, chunkMessageConfig := range splitLargeMessage(messageConfig) {
-								logSendMessage(bot.Send(chunkMessageConfig))
-							}
+						// Send prepared messages.
+						for _, messageConfig := range writer.Messages() {
+							logSendMessage(bot.Send(messageConfig))
 						}
 					}(update.Message)
 				}
@@ -188,95 +172,6 @@ func newMessageConfig(replyTo *tgbotapi.Message, messageText string) tgbotapi.Me
 	messageConfig := tgbotapi.NewMessage(replyTo.Chat.ID, messageText)
 	messageConfig.ReplyToMessageID = replyTo.MessageID
 	return messageConfig
-}
-
-// splitLargeMessage splits large message into several small messages.
-func splitLargeMessage(messageConfig tgbotapi.MessageConfig) []tgbotapi.MessageConfig {
-	inRange := func(x, a, b int) bool { return x >= a && x <= b }
-
-	// Result chunk messages.
-	chunkMessageConfigs := make([]tgbotapi.MessageConfig, 0)
-
-	// Split original message to chunks.
-	sectionNumber, sectionLowerIndex := 0, 0
-	for sectionNumber < MaxChunkMessages && sectionLowerIndex < len(messageConfig.Text) {
-		chunkMessageConfig := messageConfig
-		sectionUpperIndex := 0
-
-		remainingLength := len(chunkMessageConfig.Text) - sectionLowerIndex
-		if remainingLength <= MaxMessageLength {
-			sectionUpperIndex = sectionLowerIndex + remainingLength - 1
-		} else {
-			sectionUpperIndex = sectionLowerIndex + MaxMessageLength - 1
-		}
-
-		chunkMessageConfig.Text = chunkMessageConfig.Text[sectionLowerIndex : sectionUpperIndex+1]
-
-		if len(chunkMessageConfig.Entities) > 0 {
-			oldEntities := chunkMessageConfig.Entities
-			newEntities := make([]tgbotapi.MessageEntity, 0)
-
-			for _, entity := range oldEntities {
-				entityLowerIndex, entityUpperIndex := entity.Offset, entity.Offset+entity.Length
-
-				switch {
-
-				// When the entity begins and ends in the current section.
-				case entityLowerIndex >= sectionLowerIndex && entityUpperIndex <= sectionUpperIndex:
-					// Calculate entity offset for local-to-section dimensions.
-					entity.Offset = entityLowerIndex - sectionLowerIndex
-
-					// Emmit calculated entity dimensions.
-					newEntities = append(newEntities, entity)
-
-				// When the entity begins in the current section and ends after it
-				case inRange(entityLowerIndex, sectionLowerIndex, sectionUpperIndex) && entityUpperIndex > sectionUpperIndex:
-					offsetToSection := entityLowerIndex - sectionLowerIndex
-
-					// Calculate entity length for local-to-section dimensions.
-					if entity.Length+offsetToSection > MaxMessageLength {
-						entity.Length = MaxMessageLength - offsetToSection
-					}
-
-					// Calculate entity offset for local-to-section dimensions.
-					entity.Offset = offsetToSection
-
-					// Emmit calculated entity dimensions.
-					newEntities = append(newEntities, entity)
-
-				// When the entity begins before the current section and ends in it.
-				case inRange(entityUpperIndex, sectionLowerIndex, sectionUpperIndex) && entityLowerIndex < sectionLowerIndex:
-					// Calculate entity length for local-to-section dimensions.
-					entity.Length = entityUpperIndex - sectionLowerIndex
-
-					// Calculate entity offset for local-to-section dimensions.
-					entity.Offset = 0
-
-					// Emmit calculated entity dimensions.
-					newEntities = append(newEntities, entity)
-
-				// When the entity begins before the current session and ends after it.
-				case entityLowerIndex < sectionLowerIndex && entityUpperIndex > sectionUpperIndex:
-					// Calculate entity length for local-to-section dimensions.
-					entity.Length = MaxMessageLength
-
-					// Calculate entity offset for local-to-section dimensions.
-					entity.Offset = 0
-
-					// Emmit calculated entity dimensions.
-					newEntities = append(newEntities, entity)
-				}
-			}
-
-			chunkMessageConfig.Entities = newEntities
-		}
-		chunkMessageConfigs = append(chunkMessageConfigs, chunkMessageConfig)
-
-		sectionNumber += 1
-		sectionLowerIndex += MaxMessageLength
-	}
-
-	return chunkMessageConfigs
 }
 
 // logIncomingMessage logs incoming message from the update object.
@@ -324,7 +219,91 @@ func executeInShell(script string) (string, error) {
 	return strings.ToValidUTF8(string(output), ""), nil
 }
 
-// getUTF16Length returns count of bytes for UTF-16 string representation.
-func getUTF16Length(utf8string string) int {
+// MessagesWriter writes messages with splitting and markup.
+type MessagesWriter struct {
+	maxMessageLength int
+	maxMessagesCount int
+	replyToMessage   *tgbotapi.Message
+	messageConfigs   []tgbotapi.MessageConfig
+	messageEntities  []tgbotapi.MessageEntity
+	stringBuilder    strings.Builder
+}
+
+// Write adds specified message text with markup.
+func (mw *MessagesWriter) Write(largeMessage string, format string) {
+	for largeMessage != "" {
+		chunkMessage := largeMessage
+		builderRuneCount := mw.getStringRuneCount(mw.stringBuilder.String())
+		messageRuneCount := mw.getStringRuneCount(chunkMessage)
+
+		// If message is larger than available size, then pick part of it
+		if builderRuneCount+messageRuneCount > mw.maxMessageLength {
+			// Split original message to right size chunks.
+			freeSpace := mw.maxMessageLength - builderRuneCount
+			messageRunes := []rune(chunkMessage)
+			chunkMessage = string(messageRunes[:freeSpace])
+			largeMessage = string(messageRunes[freeSpace:])
+		} else {
+			// Everything is written.
+			largeMessage = ""
+		}
+
+		// Store metadata to entities slice.
+		if format != "" {
+			mw.messageEntities = append(mw.messageEntities, tgbotapi.MessageEntity{
+				Type:   format,
+				Offset: mw.getUTF16BytesCount(mw.stringBuilder.String()),
+				Length: mw.getUTF16BytesCount(chunkMessage),
+			})
+		}
+
+		// Store message to string builder.
+		mw.stringBuilder.WriteString(chunkMessage)
+
+		// Flush accumulated data when it was an overflow.
+		if builderRuneCount+messageRuneCount > mw.maxMessageLength {
+			mw.flush()
+		}
+	}
+}
+
+// flush flushes accumulated data to messages.
+func (mw *MessagesWriter) flush() {
+	// When max messages limit achieved.
+	if len(mw.messageConfigs) >= mw.maxMessagesCount {
+		mw.stringBuilder = strings.Builder{}
+		mw.messageEntities = nil
+		return
+	}
+
+	messageConfig := tgbotapi.MessageConfig{
+		Text:     mw.stringBuilder.String(),
+		Entities: mw.messageEntities,
+	}
+
+	if mw.replyToMessage != nil {
+		messageConfig.ReplyToMessageID = mw.replyToMessage.MessageID
+	}
+
+	mw.messageConfigs = append(mw.messageConfigs, messageConfig)
+	mw.stringBuilder = strings.Builder{}
+	mw.messageEntities = nil
+}
+
+// Messages returns accumulated message configs.
+func (mw *MessagesWriter) Messages() []tgbotapi.MessageConfig {
+	if mw.stringBuilder.Len() != 0 {
+		mw.flush()
+	}
+	return mw.messageConfigs
+}
+
+// getUTF16BytesCount returns count of bytes for UTF-16 version of `utf8string`.
+func (mw *MessagesWriter) getUTF16BytesCount(utf8string string) int {
 	return len(utf16.Encode([]rune(utf8string)))
+}
+
+// getStringRuneCount returns count of runes for UTF-8 string in `utf8string`.
+func (mw *MessagesWriter) getStringRuneCount(utf8string string) int {
+	return utf8.RuneCountInString(utf8string)
 }
