@@ -137,7 +137,7 @@ func main() {
 						}
 						writer.Write("Output:", "bold")
 						writer.Write("\n", "")
-						writer.Write(output, "bold")
+						writer.Write(output, "code")
 
 						if err != nil {
 							// Prepare error response message for command run.
