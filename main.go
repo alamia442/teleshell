@@ -23,8 +23,8 @@ const (
 	// CmdLogout specifies chat logout command.
 	CmdLogout = "/logout"
 
-	// CmdDocument specifies document display command.
-	CmdDocument = "/document"
+	// CmdDisplay specifies file display command.
+	CmdDisplay = "/display"
 
 	// CmdUpload specifies upload file command.
 	CmdUpload = "/upload"
@@ -43,8 +43,8 @@ const (
 	// ChatStateAwaitingPassword represents awaiting password state.
 	ChatStateAwaitingPassword
 
-	// ChatStateAwaitingDocumentPath represents awaiting document path state.
-	ChatStateAwaitingDocumentPath
+	// ChatStateAwaitingDisplayPath represents awaiting display path state.
+	ChatStateAwaitingDisplayPath
 
 	// ChatStateAwaitingUploadPath represents awaiting upload path state.
 	ChatStateAwaitingUploadPath
@@ -143,25 +143,25 @@ func main() {
 					chats[update.Message.Chat.ID].LoggedIn = false
 				}
 
-			// Handle document command.
-			case update.Message.Text == CmdDocument:
+			// Handle display command.
+			case update.Message.Text == CmdDisplay:
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message for display document command.
-					messageConfig := newMessageConfig(update.Message, "Specify document path")
+					// Prepare response message for display file command.
+					messageConfig := newMessageConfig(update.Message, "Specify path")
 					logSendMessage(bot.Send(messageConfig))
 
-					// Switch chat session state to awaiting document path.
-					chats[update.Message.Chat.ID].State = ChatStateAwaitingDocumentPath
+					// Switch chat session state to awaiting display path.
+					chats[update.Message.Chat.ID].State = ChatStateAwaitingDisplayPath
 				}
 
-			// Handle document with args command.
-			case strings.HasPrefix(update.Message.Text, CmdDocument):
-				commandArgs := strings.TrimPrefix(update.Message.Text, CmdDocument)
+			// Handle display with args command.
+			case strings.HasPrefix(update.Message.Text, CmdDisplay):
+				commandArgs := strings.TrimPrefix(update.Message.Text, CmdDisplay)
 				update.Message.Text = strings.Trim(commandArgs, " ")
 				fallthrough
 
-			// Handle document path command.
-			case chats[update.Message.Chat.ID].State == ChatStateAwaitingDocumentPath:
+			// Handle display path command.
+			case chats[update.Message.Chat.ID].State == ChatStateAwaitingDisplayPath:
 				// Switch chat state back to initial to rule out state traps.
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
@@ -172,7 +172,7 @@ func main() {
 						messageConfig := newMessageConfig(update.Message, err.Error())
 						logSendMessage(bot.Send(messageConfig))
 					} else {
-						// Prepare response message with a document file.
+						// Prepare response message with a file.
 						messageConfig := tgbotapi.NewDocument(update.Message.Chat.ID, fileBytes)
 						messageConfig.ReplyToMessageID = update.Message.MessageID
 						logSendMessage(bot.Send(messageConfig))
@@ -186,7 +186,7 @@ func main() {
 					messageConfig := newMessageConfig(update.Message, "Specify upload path")
 					logSendMessage(bot.Send(messageConfig))
 
-					// Switch chat session state to awaiting document path.
+					// Switch chat session state to awaiting upload path.
 					chats[update.Message.Chat.ID].State = ChatStateAwaitingUploadPath
 				}
 
