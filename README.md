@@ -2,6 +2,10 @@
 
 Shell commands executor via Telegram Bot.
 
+## Demo Screencast
+
+![Demo Screencast](screencast.gif)
+
 ## Building under Windows for Linux
 
 ```ps
