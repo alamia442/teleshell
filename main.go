@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +25,9 @@ const (
 
 	// CmdDocument specifies document display command.
 	CmdDocument = "/document"
+
+	// CmdUpload specifies upload file command.
+	CmdUpload = "/upload"
 )
 
 var (
@@ -41,12 +45,19 @@ const (
 
 	// ChatStateAwaitingDocumentPath represents awaiting document path state.
 	ChatStateAwaitingDocumentPath
+
+	// ChatStateAwaitingUploadPath represents awaiting upload path state.
+	ChatStateAwaitingUploadPath
+
+	// ChatStateAwaitingUploadFile represents awaiting upload file state.
+	ChatStateAwaitingUploadFile
 )
 
 // ChatState represents chat state.
 type ChatState struct {
-	State    int
-	LoggedIn bool
+	State      int
+	LoggedIn   bool
+	UploadPath string
 }
 
 func main() {
@@ -135,7 +146,7 @@ func main() {
 			// Handle document command.
 			case update.Message.Text == CmdDocument:
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message for successful logout.
+					// Prepare response message for display document command.
 					messageConfig := newMessageConfig(update.Message, "Specify document path")
 					logSendMessage(bot.Send(messageConfig))
 
@@ -165,6 +176,99 @@ func main() {
 						messageConfig := tgbotapi.NewDocument(update.Message.Chat.ID, fileBytes)
 						messageConfig.ReplyToMessageID = update.Message.MessageID
 						logSendMessage(bot.Send(messageConfig))
+					}
+				}
+
+			// Handle upload command.
+			case update.Message.Text == CmdUpload:
+				if checkLogin(chats, update.Message, bot) {
+					// Prepare response message for upload file command.
+					messageConfig := newMessageConfig(update.Message, "Specify upload path")
+					logSendMessage(bot.Send(messageConfig))
+
+					// Switch chat session state to awaiting document path.
+					chats[update.Message.Chat.ID].State = ChatStateAwaitingUploadPath
+				}
+
+			// Handle upload with args command.
+			case strings.HasPrefix(update.Message.Text, CmdUpload):
+				commandArgs := strings.TrimPrefix(update.Message.Text, CmdUpload)
+				update.Message.Text = strings.Trim(commandArgs, " ")
+				fallthrough
+
+			// Handle upload path command.
+			case chats[update.Message.Chat.ID].State == ChatStateAwaitingUploadPath:
+				// Switch chat state back to initial to rule out state traps.
+				chats[update.Message.Chat.ID].State = ChatStateInitial
+
+				if checkLogin(chats, update.Message, bot) {
+					chats[update.Message.Chat.ID].State = ChatStateAwaitingUploadFile
+					chats[update.Message.Chat.ID].UploadPath = update.Message.Text
+
+					// Prepare response message with a file path request.
+					messageConfig := newMessageConfig(update.Message, "Specify file attachment")
+					logSendMessage(bot.Send(messageConfig))
+				}
+
+			// Handle upload file command.
+			case chats[update.Message.Chat.ID].State == ChatStateAwaitingUploadFile:
+				// Switch chat state back to initial to rule out state traps.
+				chats[update.Message.Chat.ID].State = ChatStateInitial
+
+				if checkLogin(chats, update.Message, bot) {
+					if update.Message.Document == nil {
+						// Prepare response message for error.
+						messageConfig := newMessageConfig(update.Message, "No file uploaded")
+						logSendMessage(bot.Send(messageConfig))
+					} else {
+						go func(message *tgbotapi.Message, uploadPath string) {
+							// Get URL for attachment file.
+							fileURL, err := bot.GetFileDirectURL(update.Message.Document.FileID)
+							if err != nil {
+								// Prepare response message for error.
+								err = errors.Wrap(err, "failed to get file URL")
+								messageConfig := newMessageConfig(update.Message, err.Error())
+								logSendMessage(bot.Send(messageConfig))
+								return
+							}
+
+							// Download attachment file.
+							fileResponse, err := http.Get(fileURL)
+							if err != nil {
+								// Prepare response message for error.
+								err = errors.Wrap(err, "failed to download file")
+								messageConfig := newMessageConfig(update.Message, err.Error())
+								logSendMessage(bot.Send(messageConfig))
+								return
+							}
+							defer func() {
+								_ = fileResponse.Body.Close()
+							}()
+
+							// Read attachment file content.
+							fileData, err := ioutil.ReadAll(fileResponse.Body)
+							if err != nil {
+								// Prepare response message for error.
+								err = errors.Wrap(err, "failed to read file content")
+								messageConfig := newMessageConfig(update.Message, err.Error())
+								logSendMessage(bot.Send(messageConfig))
+								return
+							}
+
+							// Save downloaded file to the FS.
+							err = ioutil.WriteFile(uploadPath, fileData, 0600)
+							if err != nil {
+								// Prepare response message for error.
+								err = errors.Wrap(err, "failed to write file content")
+								messageConfig := newMessageConfig(update.Message, err.Error())
+								logSendMessage(bot.Send(messageConfig))
+								return
+							}
+
+							// Specified file uploaded to file system.
+							messageConfig := newMessageConfig(update.Message, "Uploaded: "+uploadPath)
+							logSendMessage(bot.Send(messageConfig))
+						}(update.Message, chats[update.Message.Chat.ID].UploadPath)
 					}
 				}
 
