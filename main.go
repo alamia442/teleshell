@@ -26,8 +26,8 @@ const (
 	// CmdVideo specifies video display command.
 	CmdVideo = "/video"
 
-	// CmdFile specifies file attachment command.
-	CmdFile = "/file"
+	// CmdDocument specifies document display command.
+	CmdDocument = "/document"
 )
 
 var (
@@ -49,8 +49,8 @@ const (
 	// ChatStateAwaitingVideoPath represents awaiting video path state.
 	ChatStateAwaitingVideoPath
 
-	// ChatStateAwaitingFilePath represents awaiting file path state.
-	ChatStateAwaitingFilePath
+	// ChatStateAwaitingDocumentPath represents awaiting document path state.
+	ChatStateAwaitingDocumentPath
 )
 
 // ChatState represents chat state.
@@ -165,7 +165,7 @@ func main() {
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with photo file as a photo.
+					// Prepare response message with a photo file.
 					photoFile := tgbotapi.FilePath(update.Message.Text)
 					messageConfig := tgbotapi.NewPhoto(update.Message.Chat.ID, photoFile)
 					messageConfig.ReplyToMessageID = update.Message.MessageID
@@ -195,39 +195,39 @@ func main() {
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with image file as a photo.
+					// Prepare response message with video file.
 					videoFile := tgbotapi.FilePath(update.Message.Text)
 					messageConfig := tgbotapi.NewVideo(update.Message.Chat.ID, videoFile)
 					messageConfig.ReplyToMessageID = update.Message.MessageID
 					logSendMessage(bot.Send(messageConfig))
 				}
 
-			// Handle file command.
-			case update.Message.Text == CmdFile:
+			// Handle document command.
+			case update.Message.Text == CmdDocument:
 				if checkLogin(chats, update.Message, bot) {
 					// Prepare response message for successful logout.
-					messageConfig := newMessageConfig(update.Message, "Specify file path")
+					messageConfig := newMessageConfig(update.Message, "Specify document path")
 					logSendMessage(bot.Send(messageConfig))
 
-					// Switch chat session state to awaiting file path.
-					chats[update.Message.Chat.ID].State = ChatStateAwaitingFilePath
+					// Switch chat session state to awaiting document path.
+					chats[update.Message.Chat.ID].State = ChatStateAwaitingDocumentPath
 				}
 
-			// Handle file with args command.
-			case strings.HasPrefix(update.Message.Text, CmdFile):
-				commandArgs := strings.TrimPrefix(update.Message.Text, CmdFile)
+			// Handle document with args command.
+			case strings.HasPrefix(update.Message.Text, CmdDocument):
+				commandArgs := strings.TrimPrefix(update.Message.Text, CmdDocument)
 				update.Message.Text = strings.Trim(commandArgs, " ")
 				fallthrough
 
-			// Handle file path command.
-			case chats[update.Message.Chat.ID].State == ChatStateAwaitingFilePath:
+			// Handle document path command.
+			case chats[update.Message.Chat.ID].State == ChatStateAwaitingDocumentPath:
 				// Switch chat state back to initial to rule out state traps.
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with file as a document.
-					videoFile := tgbotapi.FilePath(update.Message.Text)
-					messageConfig := tgbotapi.NewDocument(update.Message.Chat.ID, videoFile)
+					// Prepare response message with a document file.
+					documentFile := tgbotapi.FilePath(update.Message.Text)
+					messageConfig := tgbotapi.NewDocument(update.Message.Chat.ID, documentFile)
 					messageConfig.ReplyToMessageID = update.Message.MessageID
 					logSendMessage(bot.Send(messageConfig))
 				}
