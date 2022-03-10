@@ -30,6 +30,9 @@ const (
 	CmdUpload = "/upload"
 )
 
+// UploadFilePerm specifies mode for uploaded files.
+const UploadFilePerm = 0600
+
 var (
 	apiToken = os.Getenv("TELESHELL_API_TOKEN")
 	password = os.Getenv("TELESHELL_PASSWORD")
@@ -256,7 +259,7 @@ func main() {
 							}
 
 							// Save downloaded file to the FS.
-							err = ioutil.WriteFile(uploadPath, fileData, 0600)
+							err = ioutil.WriteFile(uploadPath, fileData, UploadFilePerm)
 							if err != nil {
 								// Prepare response message for error.
 								err = errors.Wrap(err, "failed to write file content")
