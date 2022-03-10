@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -19,12 +21,6 @@ const (
 
 	// CmdLogout specifies chat logout command.
 	CmdLogout = "/logout"
-
-	// CmdPhoto specifies photo display command.
-	CmdPhoto = "/photo"
-
-	// CmdVideo specifies video display command.
-	CmdVideo = "/video"
 
 	// CmdDocument specifies document display command.
 	CmdDocument = "/document"
@@ -42,12 +38,6 @@ const (
 
 	// ChatStateAwaitingPassword represents awaiting password state.
 	ChatStateAwaitingPassword
-
-	// ChatStateAwaitingPhotoPath represents awaiting photo path state.
-	ChatStateAwaitingPhotoPath
-
-	// ChatStateAwaitingVideoPath represents awaiting video path state.
-	ChatStateAwaitingVideoPath
 
 	// ChatStateAwaitingDocumentPath represents awaiting document path state.
 	ChatStateAwaitingDocumentPath
@@ -142,66 +132,6 @@ func main() {
 					chats[update.Message.Chat.ID].LoggedIn = false
 				}
 
-			// Handle photo command.
-			case update.Message.Text == CmdPhoto:
-				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message for successful logout.
-					messageConfig := newMessageConfig(update.Message, "Specify photo path")
-					logSendMessage(bot.Send(messageConfig))
-
-					// Switch chat session state to awaiting photo path.
-					chats[update.Message.Chat.ID].State = ChatStateAwaitingPhotoPath
-				}
-
-			// Handle photo with args command.
-			case strings.HasPrefix(update.Message.Text, CmdPhoto):
-				commandArgs := strings.TrimPrefix(update.Message.Text, CmdPhoto)
-				update.Message.Text = strings.Trim(commandArgs, " ")
-				fallthrough
-
-			// Handle photo path command.
-			case chats[update.Message.Chat.ID].State == ChatStateAwaitingPhotoPath:
-				// Switch chat state back to initial to rule out state traps.
-				chats[update.Message.Chat.ID].State = ChatStateInitial
-
-				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with a photo file.
-					photoFile := tgbotapi.FilePath(update.Message.Text)
-					messageConfig := tgbotapi.NewPhoto(update.Message.Chat.ID, photoFile)
-					messageConfig.ReplyToMessageID = update.Message.MessageID
-					logSendMessage(bot.Send(messageConfig))
-				}
-
-			// Handle video command.
-			case update.Message.Text == CmdVideo:
-				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message for successful logout.
-					messageConfig := newMessageConfig(update.Message, "Specify video path")
-					logSendMessage(bot.Send(messageConfig))
-
-					// Switch chat session state to awaiting video path.
-					chats[update.Message.Chat.ID].State = ChatStateAwaitingVideoPath
-				}
-
-			// Handle video with args command.
-			case strings.HasPrefix(update.Message.Text, CmdVideo):
-				commandArgs := strings.TrimPrefix(update.Message.Text, CmdVideo)
-				update.Message.Text = strings.Trim(commandArgs, " ")
-				fallthrough
-
-			// Handle video path command.
-			case chats[update.Message.Chat.ID].State == ChatStateAwaitingVideoPath:
-				// Switch chat state back to initial to rule out state traps.
-				chats[update.Message.Chat.ID].State = ChatStateInitial
-
-				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with video file.
-					videoFile := tgbotapi.FilePath(update.Message.Text)
-					messageConfig := tgbotapi.NewVideo(update.Message.Chat.ID, videoFile)
-					messageConfig.ReplyToMessageID = update.Message.MessageID
-					logSendMessage(bot.Send(messageConfig))
-				}
-
 			// Handle document command.
 			case update.Message.Text == CmdDocument:
 				if checkLogin(chats, update.Message, bot) {
@@ -225,11 +155,17 @@ func main() {
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with a document file.
-					documentFile := tgbotapi.FilePath(update.Message.Text)
-					messageConfig := tgbotapi.NewDocument(update.Message.Chat.ID, documentFile)
-					messageConfig.ReplyToMessageID = update.Message.MessageID
-					logSendMessage(bot.Send(messageConfig))
+					fileBytes, err := getFileBytes(update.Message.Text)
+					if err != nil {
+						// Prepare response message for error.
+						messageConfig := newMessageConfig(update.Message, err.Error())
+						logSendMessage(bot.Send(messageConfig))
+					} else {
+						// Prepare response message with a document file.
+						messageConfig := tgbotapi.NewDocument(update.Message.Chat.ID, fileBytes)
+						messageConfig.ReplyToMessageID = update.Message.MessageID
+						logSendMessage(bot.Send(messageConfig))
+					}
 				}
 
 			// Handle shell command.
@@ -314,6 +250,19 @@ func logSendMessage(message tgbotapi.Message, err error) {
 	logEvent.Int("message-id", message.MessageID)
 	logEvent.Str("message-text", message.Text)
 	logEvent.Msg("Message sent")
+}
+
+// getFileBytes returns file bytes by path.
+func getFileBytes(path string) (*tgbotapi.FileBytes, error) {
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read file")
+	}
+
+	return &tgbotapi.FileBytes{
+		Name:  filepath.Base(path),
+		Bytes: data,
+	}, nil
 }
 
 // executeInShell executes specified script in Bash.
