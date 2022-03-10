@@ -20,8 +20,8 @@ const (
 	// CmdLogout specifies chat logout command.
 	CmdLogout = "/logout"
 
-	// CmdImage specifies image display command.
-	CmdImage = "/image"
+	// CmdPhoto specifies photo display command.
+	CmdPhoto = "/photo"
 
 	// CmdVideo specifies video display command.
 	CmdVideo = "/video"
@@ -43,8 +43,8 @@ const (
 	// ChatStateAwaitingPassword represents awaiting password state.
 	ChatStateAwaitingPassword
 
-	// ChatStateAwaitingImagePath represents awaiting image path state.
-	ChatStateAwaitingImagePath
+	// ChatStateAwaitingPhotoPath represents awaiting photo path state.
+	ChatStateAwaitingPhotoPath
 
 	// ChatStateAwaitingVideoPath represents awaiting video path state.
 	ChatStateAwaitingVideoPath
@@ -142,32 +142,32 @@ func main() {
 					chats[update.Message.Chat.ID].LoggedIn = false
 				}
 
-			// Handle image command.
-			case update.Message.Text == CmdImage:
+			// Handle photo command.
+			case update.Message.Text == CmdPhoto:
 				if checkLogin(chats, update.Message, bot) {
 					// Prepare response message for successful logout.
-					messageConfig := newMessageConfig(update.Message, "Specify image path")
+					messageConfig := newMessageConfig(update.Message, "Specify photo path")
 					logSendMessage(bot.Send(messageConfig))
 
-					// Switch chat session state to awaiting image path.
-					chats[update.Message.Chat.ID].State = ChatStateAwaitingImagePath
+					// Switch chat session state to awaiting photo path.
+					chats[update.Message.Chat.ID].State = ChatStateAwaitingPhotoPath
 				}
 
-			// Handle image with args command.
-			case strings.HasPrefix(update.Message.Text, CmdImage):
-				commandArgs := strings.TrimPrefix(update.Message.Text, CmdImage)
+			// Handle photo with args command.
+			case strings.HasPrefix(update.Message.Text, CmdPhoto):
+				commandArgs := strings.TrimPrefix(update.Message.Text, CmdPhoto)
 				update.Message.Text = strings.Trim(commandArgs, " ")
 				fallthrough
 
-			// Handle image path command.
-			case chats[update.Message.Chat.ID].State == ChatStateAwaitingImagePath:
+			// Handle photo path command.
+			case chats[update.Message.Chat.ID].State == ChatStateAwaitingPhotoPath:
 				// Switch chat state back to initial to rule out state traps.
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with image file as a photo.
-					imageFile := tgbotapi.FilePath(update.Message.Text)
-					messageConfig := tgbotapi.NewPhoto(update.Message.Chat.ID, imageFile)
+					// Prepare response message with photo file as a photo.
+					photoFile := tgbotapi.FilePath(update.Message.Text)
+					messageConfig := tgbotapi.NewPhoto(update.Message.Chat.ID, photoFile)
 					messageConfig.ReplyToMessageID = update.Message.MessageID
 					logSendMessage(bot.Send(messageConfig))
 				}
@@ -179,7 +179,7 @@ func main() {
 					messageConfig := newMessageConfig(update.Message, "Specify video path")
 					logSendMessage(bot.Send(messageConfig))
 
-					// Switch chat session state to awaiting image path.
+					// Switch chat session state to awaiting video path.
 					chats[update.Message.Chat.ID].State = ChatStateAwaitingVideoPath
 				}
 
@@ -209,7 +209,7 @@ func main() {
 					messageConfig := newMessageConfig(update.Message, "Specify file path")
 					logSendMessage(bot.Send(messageConfig))
 
-					// Switch chat session state to awaiting image path.
+					// Switch chat session state to awaiting file path.
 					chats[update.Message.Chat.ID].State = ChatStateAwaitingFilePath
 				}
 
@@ -225,7 +225,7 @@ func main() {
 				chats[update.Message.Chat.ID].State = ChatStateInitial
 
 				if checkLogin(chats, update.Message, bot) {
-					// Prepare response message with image file as a photo.
+					// Prepare response message with file as a document.
 					videoFile := tgbotapi.FilePath(update.Message.Text)
 					messageConfig := tgbotapi.NewDocument(update.Message.Chat.ID, videoFile)
 					messageConfig.ReplyToMessageID = update.Message.MessageID
