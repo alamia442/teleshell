@@ -28,6 +28,7 @@ export TELESHELL_SHELL="/bin/bash"
 # Copy binary to the right place
 mkdir -p /opt/bin
 cp ./build/teleshell.linux /opt/bin/teleshell
+chmod 755 /opt/bin/teleshell
 
 # Configure systemd service
 cp ./systemd/teleshell.service /etc/systemd/system/
