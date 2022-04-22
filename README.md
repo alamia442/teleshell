@@ -6,14 +6,14 @@ Shell commands executor via Telegram Bot.
 
 ![Demo Screencast](screencast.gif)
 
-## Building under Windows for Linux
+## Building on Windows for Linux
 
 ```ps
 $Env:GOOS = "linux"; $Env:GOARCH = "amd64"
 & "C:\Program Files\Go\bin\go.exe" build -o build/teleshell.linux .
 ```
 
-## Running under Linux
+## Running on Linux
 
 ```bash
 export TELESHELL_API_TOKEN="TELEGRAM_BOT_API_TOKEN"
@@ -22,7 +22,7 @@ export TELESHELL_SHELL="/bin/bash"
 ./build/teleshell.linux
 ```
 
-# Installing for Linux with Systemd
+# Installing on Linux with Systemd
 
 ```bash
 # Copy binary to the right place
