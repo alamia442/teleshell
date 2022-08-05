@@ -1,1 +1,1 @@
-worker: build/teleshell
+worker: chmod +x build/teleshell; build/teleshell
