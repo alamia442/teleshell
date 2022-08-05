@@ -1,0 +1,24 @@
+
+
+{
+    "env": {
+        "TELESHELL_API_TOKEN": {
+            "description": "[TELEGRAM_BOT_API_TOKEN] - Get this from https://t.me/botfather",
+            "required": true},
+        "TELESHELL_PASSWORD": {
+            "description": "[PASSWORD_TO_ACCESS_BOT]",
+            "required": true},
+        "TELESHELL_SHELL": {
+            "description": "shell type",
+            "value": "/bin/bash"}
+    },
+    "buildpacks": [
+        {"url": "https://github.com/amivin/aria2-heroku.git"},
+        {"url": "https://github.com/HasibulKabir/heroku-buildpack-rarlab.git"},
+        {"url": "https://github.com/opendoor-labs/heroku-buildpack-p7zip"},
+        {"url": "https://github.com/FFmpeg/FFmpeg.git"},
+        {"url": "https://github.com/heroku/heroku-buildpack-apt.git"},
+        {"url": "https://github.com/code-pms/mediainfo-buildpack.git"},
+        {"url": "heroku/go"}
+    ]
+}
