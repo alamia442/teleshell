@@ -1,0 +1,9 @@
+:repo:deb [trusted=yes arch=amd64] https://ppa.launchpadcontent.net/wahibre/mtn/ubuntu focal main
+
+ffmpeg
+tree
+wget2
+p7zip-full
+mkvtoolnix
+mediainfo
+mtn
